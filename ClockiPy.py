@@ -124,7 +124,7 @@ if not os.path.isfile(PATH + USER):
     layoutUser = [[sg.Text('Benvenuto su ClockiPy, dimmi come ti chiami (Cognome e nome)')],
                   [sg.Text('->: '), sg.InputText(key='Username')],
                   [sg.Button('Salva', key='Salva'), sg.Exit(button_color=('white', 'firebrick4'), key='Exit')]]
-    windowLogin = sg.Window('ClockiPy', layoutUser, auto_size_buttons=False, keep_on_top=True,
+    windowLogin = sg.Window('ClockiPy', layoutUser, auto_size_buttons=True, keep_on_top=True,
                             grab_anywhere=True)
     while True:
         event, values = windowLogin.read()
@@ -157,7 +157,7 @@ if not projects:
         [sg.Text('Devi inserire almeno un nome di un progetto. In futuro potrai modificarlo o aggiungerne altri.')],
         [sg.Text('->: '), sg.InputText(key='Project')],
         [sg.Button('Salva', key='Salva'), sg.Exit(button_color=('white', 'firebrick4'), key='Exit')]]
-    windowProject = sg.Window('ClockiPy', layoutProject, auto_size_buttons=False, keep_on_top=True,
+    windowProject = sg.Window('ClockiPy', layoutProject, auto_size_buttons=True, keep_on_top=True,
                               grab_anywhere=True)
     while True:
         event, values = windowProject.read()
@@ -202,7 +202,8 @@ projNameList = [proj[1] for proj in projectsList]
           [sg.Text('')]]"""
 layout = [[sg.Menu(menu_def, )],
           [sg.Text('Nome Task: '), sg.InputText(key="Task")],
-          [sg.Text('00:00.00', size=(12, 2), font=('Helvetica', 20), justification='center', key='text')],
+          [sg.Button('+', key="Edit"),
+           sg.Text('00:00.00', size=(12, 1), font=('Helvetica', 20), key='text')],
           [sg.Text("Progetto attuale: "), sg.Text(key='comboProject', size=(40, 1)),
            sg.Button('Scegli', key='chooseProject', button_color=('white', 'gray'))],
           [sg.Button('Avvia', key='runStop', button_color=('white', '#001480')),
@@ -212,7 +213,7 @@ layout = [[sg.Menu(menu_def, )],
           [sg.Text('')],
           [sg.Button("Widget", key="Widget")]]
 
-window = sg.Window('ClockiPy', layout, auto_size_buttons=False, keep_on_top=False)
+window = sg.Window('ClockiPy', layout, auto_size_buttons=True, keep_on_top=False)
 
 # ----------------  main loop  ----------------
 current_time = 0
@@ -243,26 +244,35 @@ while True:
         logSpegnimento = retrieve(PATH + LOGSPEGNIMENTO)
         logSpegnimento = logSpegnimento[-1]
         if logSpegnimento[0] == activeTask[0]:
-            dataSpegniemnto = datetime.datetime.fromtimestamp(float(logSpegnimento[1]) / 100).strftime('%d-%m-%Y %H:%M:%S')
-            yesNo = sg.PopupYesNo(f"Il programma è stato chiuso in questa data: {dataSpegniemnto} mentre il task "
-                                  f"{activeTask[3]} era in esecuzione\n"
-                                  f"Interrompo e salvo il Task usando quella data come riferiemnto? [Yes] o vuoi "
-                                  f"riprenderne l'esecuzione? [No]")
-            if yesNo == "Yes":
-                activeTask[5] = logSpegnimento[1]
-                activeTask[6] = False
-                updateData(PATH + TASK, activeTask, int(activeTask[0]))
-                activeTask = []
-                paused = True
-            else:
-                start_time = int(round(float(activeTask[4])))
-                projectID = activeTask[2]
-                currentProject = retrieveByX(projectsList, projectID, 0)
-                paused_time = start_time
-                window['logTask'].update(f'Stai eseguendo il task {activeTask[3]}')
-                window['runStop'].update(text='Stop&Save')
-                window['Task'].update(value=activeTask[3])
-                window['comboProject'].update(value=currentProject[1])
+            dataSpegniemnto = datetime.datetime.fromtimestamp(float(logSpegnimento[1]) / 100).strftime(
+                '%d-%m-%Y %H:%M:%S')
+            layoutRipresaTask = [[sg.Text(f"Il programma è stato chiuso in questa data: {dataSpegniemnto} mentre il "
+                                          f"task {activeTask[3]} era in esecuzione\n"
+                                          f"Interrompo e salvo il Task usando quella data come riferiemento? [Salva] o "
+                                          f"vuoi riprenderne l'esecuzione? [Riprendi]")],
+                                 [sg.Button("Ferma e Salva", key="fermaESalva"), sg.Button("Riprendi", key="riprendi")]]
+            windowRipresaTask = sg.Window("Riprendi?", layoutRipresaTask, keep_on_top=True)
+            while True:
+                eventTask, valuesTask = windowRipresaTask.read()
+                if eventTask is None or eventTask == 'riprendi':
+                    start_time = int(round(float(activeTask[4])))
+                    projectID = activeTask[2]
+                    currentProject = retrieveByX(projectsList, projectID, 0)
+                    paused_time = start_time
+                    window['logTask'].update(f'Stai eseguendo il task {activeTask[3]}')
+                    window['runStop'].update(text='Stop&Save')
+                    window['Task'].update(value=activeTask[3])
+                    window['comboProject'].update(value=currentProject[1])
+                    windowRipresaTask.Close()
+                    break
+                elif eventTask == "fermaESalva":
+                    activeTask[5] = logSpegnimento[1]
+                    activeTask[6] = False
+                    updateData(PATH + TASK, activeTask, int(activeTask[0]))
+                    activeTask = []
+                    paused = True
+                    windowRipresaTask.Close()
+                    break
         justStarted = False
 
     # --------- Do Button Operations --------
@@ -278,13 +288,47 @@ while True:
     if event == 'Stop&Save':
         paused = True
         paused_time = int(round(time.time() * 100))
-        element = window['runStop']
-        element.update(text='Avvia')
-        window['logTask'].update(f'Hai stoppato il task {values["Task"]}')
-        # TODO: Modifica nel CSV inserendo FINE e mettendo a False ATTIVO
-        updateData(PATH + TASK, [taskID, userID, projectID, values["Task"], start_time, paused_time, False], taskID)
-        start_time = int(round(time.time() * 100))
-        paused_time = start_time
+        wrongformat = False
+        layoutEdit = [[sg.Text("Vuoi interrompere e salvare il Task? (puoi modificare l'orario prima di confermare)")],
+                      [sg.InputText(
+            datetime.datetime.fromtimestamp(float(paused_time) / 100).strftime('%d-%m-%Y %H:%M:%S'),
+            key="editableTime")],
+            [sg.Button("Conferma", key="modifica"), sg.Exit()]]
+        windowEdit = sg.Window("Edit Time", layoutEdit, grab_anywhere=False)
+        while True:
+            eventEdit, valuesEdit = windowEdit.read()
+            if eventEdit is None or eventEdit == 'Exit':  # ALWAYS give a way out of program
+                windowEdit.Close()
+                break
+            if eventEdit == "modifica":
+                activeTask = isActive()
+                if activeTask:
+                    endTime = valuesEdit["editableTime"]
+                    try:
+                        endTimeNum = int(time.mktime(time.strptime(endTime, "%d-%m-%Y %H:%M:%S"))) * 100
+                    except:
+                        wrongformat = True
+                    if endTime == "" or wrongformat:
+                        sg.PopupOK("Non hai scelto date valide o hai usato un formato errato!")
+                    elif endTimeNum < start_time:
+                        sg.PopupOK("La data di fine del task non può essere precedente alla data di inizio")
+                    else:
+                        paused_time = endTimeNum
+                        element = window['runStop']
+                        element.update(text='Avvia')
+                        window['logTask'].update(f'Hai stoppato il task {values["Task"]}')
+                        # TODO: Modifica nel CSV inserendo FINE e mettendo a False ATTIVO
+                        updateData(PATH + TASK,
+                                   [taskID, userID, projectID, values["Task"], start_time, paused_time, False], taskID)
+                        start_time = int(round(time.time() * 100))
+                        paused_time = start_time
+                        windowEdit.Close()
+                        break
+                else:
+                    sg.PopupOK("Non c'è nessun task attivo al momento."
+                               "di inizio")
+                    windowEdit.Close()
+                    break
     elif event == 'Avvia':
         paused = False
         start_time = start_time + int(round(time.time() * 100)) - paused_time
@@ -295,7 +339,7 @@ while True:
         taskID += 1
         # Inserisce nel CSV una nuova riga creando un ID più i vari campi
         storeData(PATH + TASK, [taskID, userID, projectID, values["Task"], start_time, "", True])
-    elif event == 'addProject':
+    elif event == 'addProject':  # TEST
         newProjName = values['newProject']
         newProjID = retrieveBigger(PATH + PROGETTI, 0)
         newProjID += 1
@@ -306,10 +350,10 @@ while True:
             print(projNameList)
             window['comboProject'].update("hh", "lll", "fjfjf")
     elif event == "chooseProject":
-        #  layoutProjectArray = []
         layoutChooseProject = [
             [sg.Radio("", "radio1", key=proj[0], background_color="gray",
-                      default=True if int(proj[0]) == int(projectID) else False), sg.InputText(proj[1], key="name_" + proj[0])]
+                      default=True if int(proj[0]) == int(projectID) else False),
+             sg.InputText(proj[1], key="name_" + proj[0])]
             for proj in projectsList]
         layoutChooseProject.append(
             [sg.Radio("", "radio1", key="nuovoProj", background_color="gray"), sg.InputText(key="newProjName")])
@@ -318,12 +362,11 @@ while True:
                                     sg.Button("Elimina", key="Elimina", button_color=('white', 'firebrick4')),
                                     sg.Exit(button_color=('white', 'firebrick4'))])
         layoutProjectArray.append(layoutChooseProject)
-        #  windowChooseProject = sg.Window('Projects', layoutProjectArray[len(layoutProjectArray)-1])
-        windowProjectArray.append(sg.Window('Projects', layoutProjectArray[-1]))
+        windowChooseProject = sg.Window('Projects', layoutProjectArray[len(layoutProjectArray) - 1])
         while True:
-            eventProj, valuesProj = windowProjectArray[-1].read()
+            eventProj, valuesProj = windowChooseProject.read()
             if eventProj is None or eventProj == 'Exit':  # ALWAYS give a way out of program
-                windowProjectArray[-1].Close()
+                windowChooseProject.Close()
                 break
             if eventProj == "Scegli" or eventProj == "Elimina":
                 for proj in projectsList:
@@ -372,6 +415,44 @@ while True:
                         break
                     else:
                         sg.PopupOK("Devi inserire un nome prima")
+    elif event == 'Edit':
+        wrongformat = False
+        layoutEdit = [[sg.InputText(
+            datetime.datetime.fromtimestamp(float(start_time) / 100).strftime('%d-%m-%Y %H:%M:%S'),
+            key="editableTime")],
+            [sg.Button("Modifica", key="modifica"), sg.Exit()]]
+        windowEdit = sg.Window("Edit Time", layoutEdit, grab_anywhere=False)
+        while True:
+            eventEdit, valuesEdit = windowEdit.read()
+            if eventEdit is None or eventEdit == 'Exit':  # ALWAYS give a way out of program
+                windowEdit.Close()
+                break
+            if eventEdit == "modifica":
+                activeTask = isActive()
+                if activeTask:
+                    newStart = valuesEdit["editableTime"]
+                    try:
+                        newStartNum = int(time.mktime(time.strptime(newStart, "%d-%m-%Y %H:%M:%S"))) * 100
+                    except:
+                        wrongformat = True
+                    if newStart == "" or wrongformat:
+                        sg.PopupOK("Non hai scelto date valide o hai usato un formato errato!")
+                    elif newStartNum > int(round(time.time() * 100)):
+                        sg.PopupOK("La data di inizio del task non più venire dal futuro")
+                    else:
+                        # TODO: modificare nel file task.csv la data di inizio del task corrispondente (se nessun task è
+                        #  stato avviato, segnalarlo)
+                        activeTask[4] = newStartNum
+                        updateData(PATH + TASK, activeTask, int(activeTask[0]))
+                        start_time = newStartNum
+                        sg.PopupOK("Data ed ora di inizio modificata correttamente")
+                        windowEdit.Close()
+                        break
+                else:
+                    sg.PopupOK("Non c'è nessun task attivo al momento. Questa funzione serve per modificarne l'orario "
+                               "di inizio")
+                    windowEdit.Close()
+                    break
     elif event == 'Show Tasks List':
         layoutList = [[sg.Exit(button_color=('white', 'firebrick4'), key='Exit')], [sg.Text("Esempio")]]
         for x in range(5):
@@ -386,7 +467,7 @@ while True:
         # TODO: Da completare CANCELLA e AGGIUNGI
     elif event == "Widget":
         layoutWidget = [[sg.Text(values["Task"], key="TaskW", size=(20, 1))],
-                        [sg.Text('00:00.00', size=(12, 1), font=('Helvetica', 12), justification='center',
+                        [sg.Text('00:00.00', size=(12, 1), font=('Helvetica', 12),
                                  key='textW')],
                         [sg.Button('Main Page', key='main', button_color=('white', '#001480'))]]
         windowWidget = sg.Window("Widget ClockiPy", layoutWidget, grab_anywhere=True, keep_on_top=True,
