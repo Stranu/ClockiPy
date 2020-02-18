@@ -211,11 +211,11 @@ layout = [[sg.Menu(menu_def, )],
           [sg.Text('Nome Task: '), sg.InputText(key="Task")],
           [sg.Button('+', key="Edit", tooltip="Modifica l'orario di inizio del task"),
            sg.Text('00:00.00', size=(12, 1), font=('Helvetica', 20), key='text')],
-          [sg.Text("Progetto attuale: "), sg.Text(key='comboProject', size=(40, 1)),
-           sg.Button('Scegli', key='chooseProject', button_color=('white', 'gray'), tooltip="Scegli, modifica, "
-                                                                                            "elimina o aggiungi un "
-                                                                                            "nuovo progetto da "
-                                                                                            "abbinare al task")],
+          [sg.Text("Progetto attuale: "), sg.Combo(projNameList, key='comboProject', default_value=projNameList[-1]),
+           sg.Button('Modifica', key='chooseProject', button_color=('white', 'gray'), tooltip="Scegli, modifica, "
+                                                                                              "elimina o aggiungi un "
+                                                                                              "nuovo progetto da "
+                                                                                              "abbinare al task")],
           [sg.Button('Avvia', key='runStop', button_color=('white', '#001480')),
            sg.Exit(button_color=('white', 'firebrick4'), key='Exit')],
           [sg.Text(size=(40, 2), key='logTask')],
@@ -256,7 +256,8 @@ while True:
         current_time = int(round(time.time() * 100)) - start_time
         if values and values["intervalliSiNo"]:
             actualTime = datetime.datetime.fromtimestamp(time.time()).strftime('%d-%m-%Y')
-            intervalsNum = int(time.mktime(time.strptime(actualTime + " " + values["combointervals"], "%d-%m-%Y %H:%M:%S")))
+            intervalsNum = int(
+                time.mktime(time.strptime(actualTime + " " + values["combointervals"], "%d-%m-%Y %H:%M:%S")))
             if intervalsNum * 100 <= int(round(time.time() * 100)):
                 layoutIntervalAlarm = [
                     [sg.Text(f"Sono le ore {values['combointervals']}! Si è attivato l'intervallo di lavoro da te "
@@ -382,16 +383,6 @@ while True:
         taskID += 1
         # Inserisce nel CSV una nuova riga creando un ID più i vari campi
         storeData(PATH + TASK, [taskID, userID, projectID, values["Task"], start_time, "", True])
-    elif event == 'addProject':  # TEST
-        newProjName = values['newProject']
-        newProjID = retrieveBigger(PATH + PROGETTI, 0)
-        newProjID += 1
-        yesNo = sg.PopupYesNo('Sei sicuro di voler creare il progetto ' + newProjName + "?")
-        if yesNo == "Yes":
-            storeData(PATH + PROGETTI, [newProjID, newProjName])
-            projNameList.append(newProjName)
-            print(projNameList)
-            window['comboProject'].update("hh", "lll", "fjfjf")
     elif event == "chooseProject":
         layoutChooseProject = [
             [sg.Radio("", "radio1", key=proj[0], background_color="gray",
@@ -401,7 +392,7 @@ while True:
         layoutChooseProject.append(
             [sg.Radio("", "radio1", key="nuovoProj", background_color="gray"), sg.InputText(key="newProjName")])
         layoutChooseProject.append([sg.Text()])
-        layoutChooseProject.append([sg.Button("Scegli/Modifica/Aggiungi", key="Scegli"),
+        layoutChooseProject.append([sg.Button("Modifica/Aggiungi", key="Scegli"),
                                     sg.Button("Elimina", key="Elimina", button_color=('white', 'firebrick4')),
                                     sg.Exit(button_color=('white', 'firebrick4'))])
         layoutProjectArray.append(layoutChooseProject)
@@ -411,25 +402,26 @@ while True:
             if eventProj is None or eventProj == 'Exit':  # ALWAYS give a way out of program
                 windowChooseProject.Close()
                 break
-            if eventProj == "Scegli" or eventProj == "Elimina":
+            elif eventProj == "Scegli" or eventProj == "Elimina":
                 for proj in projectsList:
                     if valuesProj[proj[0]]:
                         newChoosenName = valuesProj["name_" + proj[0]]
                         if eventProj == "Elimina":
                             #  TODO: Se non coincide col progetto in uso, non cambiare il nome ed il valore attuale
                             updateData(PATH + PROGETTI, [], int(proj[0]))
+                            projectsList = retrieve(PATH + PROGETTI)
                             if projectID == int(proj[0]):
                                 projectID = 1
-                                newChoosenName = retrieve(PATH + PROGETTI)
-                                newChoosenName = newChoosenName[0][0]
-                                window["comboProject"].update(value=newChoosenName)
-                            sg.PopupOK("Progetto eliminato correttamente.\n"
-                                       "Per vedere le modifiche in questa lista, sarà necessario chiudere e riaprire "
-                                       "il programma")
+                                newChoosenName = projectsList[0][1]
+                                window["comboProject"].update(newChoosenName)
+                            window["comboProject"].update(values=[proj[1] for proj in projectsList])
+                            sg.PopupOK("Progetto eliminato correttamente.")
                         elif eventProj == "Scegli":
                             updateData(PATH + PROGETTI, [proj[0], newChoosenName], int(proj[0]))
                             projectID = proj[0]
-                            window["comboProject"].update(value=newChoosenName)
+                            window["comboProject"].update(newChoosenName)
+                            projectsList = retrieve(PATH + PROGETTI)
+                            window["comboProject"].update(values=[proj[1] for proj in projectsList])
                             sg.PopupOK("Progetto scelto correttamente.\n")
                         currentTask = isActive()
                         if currentTask:
@@ -446,15 +438,15 @@ while True:
                     if valuesProj["newProjName"]:
                         storeData(PATH + PROGETTI, [newProjID, valuesProj["newProjName"]])
                         window["comboProject"].update(value=valuesProj["newProjName"])
+                        projectsList = retrieve(PATH + PROGETTI)
+                        window["comboProject"].update(values=[proj[1] for proj in projectsList])
                         currentTask = isActive()
                         if currentTask:
                             updateData(PATH + TASK,
                                        [currentTask[0], currentTask[1], projectID, currentTask[3], currentTask[4],
                                         currentTask[5], currentTask[6]], int(currentTask[0]))
-                        sg.PopupOK("Progetto assegnato e creato correttamente.\n"
-                                   "Per poterlo visualizzare in questa lista, sarà necessario chiudere e riaprire il "
-                                   "programma")
-                        windowProjectArray[-1].Close()
+                        sg.PopupOK("Progetto assegnato e creato correttamente.")
+                        windowChooseProject.Close()
                         break
                     else:
                         sg.PopupOK("Devi inserire un nome prima")
