@@ -1,3 +1,6 @@
+#  TODO: Multithreading per la gestione delle finestre con liste (non aggiornabili in maniera dinamica)
+#  Impostazione orari di lavoro per l'auto "stoppaggio" e salvataggio dei task quando si attiva la checkbox
+
 import sys
 import PySimpleGUI as sg
 import time
@@ -7,11 +10,11 @@ import os
 
 PATH = "csv"
 USER = "/user.csv"
-USERHEADER = ["ID", "Username"]
+USERHEADER = ["ID", "Username", "Theme"]
 TASK = "/tasks.csv"
 TASKHEADER = ["TaskID", "UserID", "ProgettoID", "NomeTask", "Inizio", "Fine", "Attivo"]
 INTERVALLI = "/intervals.csv"
-INTERVALLIHEADER = ["UserID", "Inizio", "Fine"]
+INTERVALLIHEADER = ["UserID", "Fine"]
 PROGETTI = "/projects.csv"
 PROGETTIHEADER = ["UserID", "NomeProgetto"]
 EXPORT = "sal.csv"
@@ -133,7 +136,7 @@ if not os.path.isfile(PATH + USER):
             break
         if event == 'Salva':
             userID = 1
-            storeData(PATH + USER, [userID, values['Username']])
+            storeData(PATH + USER, [userID, values['Username'], "Reddit"])
             windowLogin.Close()
             break
 
@@ -147,6 +150,7 @@ if not os.path.isfile(PATH + TASK):
     storeData(PATH + TASK, TASKHEADER)
 if not os.path.isfile(PATH + INTERVALLI):
     storeData(PATH + INTERVALLI, INTERVALLIHEADER)
+    storeData(PATH + INTERVALLI, [userID, "13:00:00, 18:00:00"])
 if not os.path.isfile(PATH + PROGETTI):
     storeData(PATH + PROGETTI, PROGETTIHEADER)
 if not os.path.isfile(PATH + LOGSPEGNIMENTO):
@@ -176,16 +180,19 @@ except:
 projectID = projectsList[-1][0]
 
 # ----------------  Create Form  ----------------
-sg.ChangeLookAndFeel('Reddit')
+#  sg.ChangeLookAndFeel('Reddit')
+sg.ChangeLookAndFeel(user[0][2])
 sg.SetOptions(element_padding=(0, 0))
 
 """menu_def = [['File', ['Show Tasks List', 'Export', 'Exit']],
             ['Edit', ['Change Theme'], ],
             ['Help', 'About...'], ]"""
 menu_def = [['File', ['Export', 'Exit']],
-            ['Edit', ['Change Theme (WIP)'], ],
+            ['Edit', ['Change Theme'], ],
             ['Help', 'About...'], ]
 projNameList = [proj[1] for proj in projectsList]
+intervals = retrieve(PATH + INTERVALLI)
+intervals = [interv.strip() for interv in intervals[0][1].split(",")]
 """layout = [[sg.Menu(menu_def, )],
           [sg.Text('Nome Task: '), sg.InputText(key="Task")],
           [sg.Text('00:00.00', size=(12, 2), font=('Helvetica', 20), justification='center', key='text')],
@@ -202,16 +209,27 @@ projNameList = [proj[1] for proj in projectsList]
           [sg.Text('')]]"""
 layout = [[sg.Menu(menu_def, )],
           [sg.Text('Nome Task: '), sg.InputText(key="Task")],
-          [sg.Button('+', key="Edit"),
+          [sg.Button('+', key="Edit", tooltip="Modifica l'orario di inizio del task"),
            sg.Text('00:00.00', size=(12, 1), font=('Helvetica', 20), key='text')],
           [sg.Text("Progetto attuale: "), sg.Text(key='comboProject', size=(40, 1)),
-           sg.Button('Scegli', key='chooseProject', button_color=('white', 'gray'))],
+           sg.Button('Scegli', key='chooseProject', button_color=('white', 'gray'), tooltip="Scegli, modifica, "
+                                                                                            "elimina o aggiungi un "
+                                                                                            "nuovo progetto da "
+                                                                                            "abbinare al task")],
           [sg.Button('Avvia', key='runStop', button_color=('white', '#001480')),
            sg.Exit(button_color=('white', 'firebrick4'), key='Exit')],
           [sg.Text(size=(40, 2), key='logTask')],
           [sg.Text('')],
           [sg.Text('')],
-          [sg.Button("Widget", key="Widget")]]
+          [sg.Button("Widget", key="Widget", tooltip="Riduci tutto ad un widget più discreto. Rimarrà sempre visibile "
+                                                     "sullo schermo"),
+           sg.Text(' ', size=(18, 1), key='textFarlocco'),
+           sg.Checkbox("Usa intervalli di lavoro", key="intervalliSiNo", tooltip="Impostando degli orari di lavoro, "
+                                                                                 "si potrà dire a clockiPy di "
+                                                                                 "interrompere il task rispettando "
+                                                                                 "gli orari scelti"),
+           sg.Combo(intervals, key='combointervals', default_value=intervals[-1]),
+           sg.Button("Modifica", key="modificaIntervalli")]]
 
 window = sg.Window('ClockiPy', layout, auto_size_buttons=True, keep_on_top=False)
 
@@ -233,8 +251,34 @@ if activeTask:
 while True:
     # --------- Read and update window --------
     if not paused:
+        intervals = retrieve(PATH + INTERVALLI)
         event, values = window.read(timeout=10)
         current_time = int(round(time.time() * 100)) - start_time
+        if values and values["intervalliSiNo"]:
+            actualTime = datetime.datetime.fromtimestamp(time.time()).strftime('%d-%m-%Y')
+            intervalsNum = int(time.mktime(time.strptime(actualTime + " " + values["combointervals"], "%d-%m-%Y %H:%M:%S")))
+            if intervalsNum * 100 <= int(round(time.time() * 100)):
+                layoutIntervalAlarm = [
+                    [sg.Text(f"Sono le ore {values['combointervals']}! Si è attivato l'intervallo di lavoro da te "
+                             f"impostato\n "
+                             f"Interrompo e salvo il Task usando questo orario come riferiemento? [Salva] o "
+                             f"vuoi riprenderne l'esecuzione? [Riprendi]")],
+                    [sg.Button("Ferma e Salva", key="fermaESalva"), sg.Button("Riprendi", key="riprendi")]]
+                windowIntervalAlarm = sg.Window("Riprendi?", layoutIntervalAlarm, keep_on_top=True)
+                while True:
+                    eventTask, valuesTask = windowIntervalAlarm.read()
+                    if eventTask is None or eventTask == 'riprendi':
+                        window["intervalliSiNo"].update(False)
+                        windowIntervalAlarm.Close()
+                        break
+                    elif eventTask == "fermaESalva":
+                        activeTask[5] = intervalsNum * 100
+                        activeTask[6] = False
+                        updateData(PATH + TASK, activeTask, int(activeTask[0]))
+                        activeTask = []
+                        paused = True
+                        windowIntervalAlarm.Close()
+                        break
     else:
         event, values = window.read()
     if event == 'runStop':
@@ -291,9 +335,9 @@ while True:
         wrongformat = False
         layoutEdit = [[sg.Text("Vuoi interrompere e salvare il Task? (puoi modificare l'orario prima di confermare)")],
                       [sg.InputText(
-            datetime.datetime.fromtimestamp(float(paused_time) / 100).strftime('%d-%m-%Y %H:%M:%S'),
-            key="editableTime")],
-            [sg.Button("Conferma", key="modifica"), sg.Exit()]]
+                          datetime.datetime.fromtimestamp(float(paused_time) / 100).strftime('%d-%m-%Y %H:%M:%S'),
+                          key="editableTime")],
+                      [sg.Button("Conferma", key="modifica"), sg.Exit()]]
         windowEdit = sg.Window("Edit Time", layoutEdit, grab_anywhere=False)
         while True:
             eventEdit, valuesEdit = windowEdit.read()
@@ -317,7 +361,6 @@ while True:
                         element = window['runStop']
                         element.update(text='Avvia')
                         window['logTask'].update(f'Hai stoppato il task {values["Task"]}')
-                        # TODO: Modifica nel CSV inserendo FINE e mettendo a False ATTIVO
                         updateData(PATH + TASK,
                                    [taskID, userID, projectID, values["Task"], start_time, paused_time, False], taskID)
                         start_time = int(round(time.time() * 100))
@@ -393,7 +436,7 @@ while True:
                             updateData(PATH + TASK,
                                        [currentTask[0], currentTask[1], projectID, currentTask[3], currentTask[4],
                                         currentTask[5], currentTask[6]], int(currentTask[0]))
-                        windowProjectArray[-1].Close()
+                        windowChooseProject.Close()
                         break
                 #  Se non fa parte dei progetti esistenti, vacreato uno nuovo
                 if valuesProj["nuovoProj"]:
@@ -452,6 +495,46 @@ while True:
                     sg.PopupOK("Non c'è nessun task attivo al momento. Questa funzione serve per modificarne l'orario "
                                "di inizio")
                     windowEdit.Close()
+                    break
+    elif event == 'modificaIntervalli':
+        oldIntervals = retrieve(PATH + INTERVALLI)
+        textIntervals = ""
+        if oldIntervals:
+            oldIntervals = oldIntervals[0]
+            textIntervals = oldIntervals[1]
+        layouIntervals = [[sg.Text("Indica gli orari di fine lavoro\n(seguendo il formato hh:mm:ss, separati da una "
+                                   "virgola)")],
+                          [sg.Multiline(default_text=textIntervals, size=(43, 5), key="intervalli")],
+                          [sg.Button("Salva", key="salva"), sg.Exit(button_color=('white', 'firebrick4'), key='Exit')]]
+        windowIntervals = sg.Window('Intervals', layouIntervals, keep_on_top=False)
+        while True:
+            eventIntervals, valuesIntervals = windowIntervals.read()
+            if eventIntervals is None or eventIntervals == 'Exit':  # ALWAYS give a way out of program
+                windowIntervals.Close()
+                break
+            elif eventIntervals == "salva":
+                intervalliNew = valuesIntervals["intervalli"]
+                intervalliNew = intervalliNew.strip()
+                intervalli = intervalliNew.split(",")
+                wrongformat = False
+                # time.mktime(time.strptime(dataSceltaInizio, "%d-%m-%Y %H:%M:%S"))
+                for intervallo in intervalli:
+                    try:
+                        checkIntervallo = time.strptime(intervallo.strip(), "%H:%M:%S")
+                    except:
+                        wrongformat = True
+                if not intervallo or wrongformat:
+                    sg.PopupOK("Non hai scelto orari validi o hai usato un formato errato!")
+                else:
+                    if oldIntervals:
+                        oldIntervals[1] = intervalliNew
+                        updateData(PATH + INTERVALLI, oldIntervals, int(oldIntervals[0]))
+                    else:
+                        storeData(PATH + INTERVALLI, [1, intervalliNew])
+                    window["combointervals"].update(values=intervalli)
+                    window["combointervals"].update(intervalli[-1])
+                    sg.PopupOK("Intervalli salvati correttamente")
+                    windowIntervals.Close()
                     break
     elif event == 'Show Tasks List':
         layoutList = [[sg.Exit(button_color=('white', 'firebrick4'), key='Exit')], [sg.Text("Esempio")]]
@@ -513,11 +596,11 @@ while True:
                 freeToGo = False
                 break
             if event == "Continua":
-                dataSceltaInizio = values["dataInizio"]
-                dataSceltaFine = values["dataFine"]
+                dataSceltaInizio = values["dataInizio"] + " 00:00:00"
+                dataSceltaFine = values["dataFine"] + " 23:59:59"
                 try:
-                    dataSceltaInizioNum = time.mktime(time.strptime(dataSceltaInizio, "%d-%m-%Y"))
-                    dataSceltaFineNum = time.mktime(time.strptime(dataSceltaFine, "%d-%m-%Y"))
+                    dataSceltaInizioNum = time.mktime(time.strptime(dataSceltaInizio, "%d-%m-%Y %H:%M:%S"))
+                    dataSceltaFineNum = time.mktime(time.strptime(dataSceltaFine, "%d-%m-%Y %H:%M:%S"))
                 except:
                     wrongformat = True
                 if dataSceltaInizio == "" or dataSceltaFine == "" or wrongformat:
@@ -564,40 +647,36 @@ while True:
             else:
                 sg.PopupOK("Non ci sono elementi da esportare nell'intervallo di tempo scelto")
     elif event == "Change Theme":
-        print("TODO: elements == Change Theme")
-        listaTemi = ['Black', 'BlueMono', 'BluePurple', 'BrightColors', 'BrownBlue', 'Dark', 'Dark2', 'DarkAmber',
-                     'DarkBlack', 'DarkBlack1', 'DarkBlue', 'DarkBlue1', 'DarkBlue10', 'DarkBlue11', 'DarkBlue12',
-                     'DarkBlue13', 'DarkBlue14', 'DarkBlue15', 'DarkBlue16', 'DarkBlue17', 'DarkBlue2', 'DarkBlue3',
-                     'DarkBlue4', 'DarkBlue5', 'DarkBlue6', 'DarkBlue7', 'DarkBlue8', 'DarkBlue9', 'DarkBrown',
-                     'DarkBrown1', 'DarkBrown2', 'DarkBrown3', 'DarkBrown4', 'DarkBrown5', 'DarkBrown6',
-                     'DarkGreen', 'DarkGreen1', 'DarkGreen2', 'DarkGreen3', 'DarkGreen4', 'DarkGreen5',
-                     'DarkGreen6', 'DarkGrey', 'DarkGrey1', 'DarkGrey2', 'DarkGrey3', 'DarkGrey4', 'DarkGrey5',
-                     'DarkGrey6', 'DarkGrey7', 'DarkPurple', 'DarkPurple1', 'DarkPurple2', 'DarkPurple3',
-                     'DarkPurple4', 'DarkPurple5', 'DarkPurple6', 'DarkRed', 'DarkRed1', 'DarkRed2', 'DarkTanBlue',
-                     'DarkTeal', 'DarkTeal1', 'DarkTeal10', 'DarkTeal11', 'DarkTeal12', 'DarkTeal2', 'DarkTeal3',
-                     'DarkTeal4', 'DarkTeal5', 'DarkTeal6', 'DarkTeal7', 'DarkTeal8', 'DarkTeal9', 'Default',
-                     'Default1', 'DefaultNoMoreNagging', 'Green', 'GreenMono', 'GreenTan', 'HotDogStand', 'Kayak',
-                     'LightBlue', 'LightBlue1', 'LightBlue2', 'LightBlue3', 'LightBlue4', 'LightBlue5',
-                     'LightBlue6', 'LightBlue7', 'LightBrown', 'LightBrown1', 'LightBrown10', 'LightBrown11',
-                     'LightBrown12', 'LightBrown13', 'LightBrown2', 'LightBrown3', 'LightBrown4', 'LightBrown5',
-                     'LightBrown6', 'LightBrown7', 'LightBrown8', 'LightBrown9', 'LightGray1', 'LightGreen',
-                     'LightGreen1', 'LightGreen10', 'LightGreen2', 'LightGreen3', 'LightGreen4', 'LightGreen5',
-                     'LightGreen6', 'LightGreen7', 'LightGreen8', 'LightGreen9', 'LightGrey', 'LightGrey1',
-                     'LightGrey2', 'LightGrey3', 'LightGrey4', 'LightGrey5', 'LightGrey6', 'LightPurple',
-                     'LightTeal', 'LightYellow', 'Material1', 'Material2', 'NeutralBlue', 'Purple', 'Reddit',
-                     'Reds', 'SandyBeach', 'SystemDefault', 'SystemDefault1', 'SystemDefaultForReal', 'Tan',
-                     'TanBlue', 'TealMono', 'Topanga']
-        layoutTheme = [[sg.Combo(listaTemi, key="sceltaTemi")],
-                       [sg.Button("Imposta Tema", key="imposta"), sg.Exit()]]
-        windowTheme = sg.Window("Scelta Tema", layoutTheme)
-        while True:
-            eventT, valuesT = windowTheme.read()
-            if eventT is None or eventT == 'Exit':  # ALWAYS give a way out of program
-                windowTheme.Close()
+        layoutThemes = [[sg.Text('Tema attuale: '), sg.Text(user[0][2], key="temaAttuale")],
+                        [sg.Text("Seleziona una delle voci per avere an'ateprima del tema")],
+                        [sg.Listbox(values=sg.theme_list(),
+                                    size=(20, 12), key='-LIST-', enable_events=True)],
+                        [sg.Button("Salva", key="imposta"), sg.Button("Ripristina default", key="default"),
+                         sg.Button('Exit')]]
+
+        windowThemes = sg.Window('Look and Feel Browser', layoutThemes)
+
+        while True:  # Event Loop
+            eventThemes, valuesThemes = windowThemes.read()
+            if eventThemes in (None, 'Exit'):
                 break
-            elif eventT == "imposta":
-                print(valuesT["sceltaTemi"])
-                sg.ChangeLookAndFeel(valuesT["sceltaTemi"])
+            elif eventThemes == "imposta":
+                user[0][2] = valuesThemes['-LIST-'][0]
+                updateData(PATH + USER, user[0], int(userID))
+                windowThemes["temaAttuale"].update(valuesThemes['-LIST-'][0])
+                sg.PopupOK("Tema impostato correttamente. Per rendere efettiva la modifica sarà necessario riavviare "
+                           "CloickiPy")
+            elif eventThemes == "default":
+                user[0][2] = "Reddit"
+                updateData(PATH + USER, user[0], int(userID))
+                windowThemes["temaAttuale"].update("Reddit")
+                sg.PopupOK("Tema resettato. Per rendere efettiva la modifica sarà necessario riavviare "
+                           "CloickiPy")
+            else:
+                sg.theme(valuesThemes['-LIST-'][0])
+                sg.popup_get_text('This is {}'.format(valuesThemes['-LIST-'][0]))
+
+        windowThemes.close()
 
     # --------- Display timer in window --------
     # window['text'].update('{:02d}:{:02d}.{:02d}'.format((current_time // 100) // 60,
