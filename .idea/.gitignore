@@ -4,4 +4,9 @@
 /modules.xml
 /ClockiPy.iml
 /misc.xml
-../csv
+../csv/projects.csv
+../csv/intervals.csv
+../csv/user.csv
+../csv/tasks.csv
+../csv/logspegnimento.csv
+
