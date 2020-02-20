@@ -287,8 +287,9 @@ while True:
 
     if activeTask and justStarted:  # If there's a task with "Active" set to True, start from there
         logSpegnimento = retrieve(PATH + LOGSPEGNIMENTO)
-        logSpegnimento = logSpegnimento[-1]
-        if logSpegnimento[0] == activeTask[0]:
+        if logSpegnimento:
+            logSpegnimento = logSpegnimento[-1]
+        if logSpegnimento and logSpegnimento[0] == activeTask[0]:
             dataSpegniemnto = datetime.datetime.fromtimestamp(float(logSpegnimento[1]) / 100).strftime(
                 '%d-%m-%Y %H:%M:%S')
             layoutRipresaTask = [[sg.Text(f"Il programma è stato chiuso in questa data: {dataSpegniemnto} mentre il "
@@ -331,14 +332,12 @@ while True:
         current_time = 0
         paused_time = start_time"""
     if event == 'Stop&Save':
-        paused = True
-        paused_time = int(round(time.time() * 100))
         wrongformat = False
         layoutEdit = [[sg.Text("Vuoi interrompere e salvare il Task? (puoi modificare l'orario prima di confermare)")],
                       [sg.InputText(
                           datetime.datetime.fromtimestamp(float(paused_time) / 100).strftime('%d-%m-%Y %H:%M:%S'),
                           key="editableTime")],
-                      [sg.Button("Conferma", key="modifica"), sg.Exit()]]
+                      [sg.Button("Conferma", key="modifica"), sg.Exit(button_color=('white', 'firebrick4'))]]
         windowEdit = sg.Window("Edit Time", layoutEdit, grab_anywhere=False)
         while True:
             eventEdit, valuesEdit = windowEdit.read()
@@ -346,6 +345,8 @@ while True:
                 windowEdit.Close()
                 break
             if eventEdit == "modifica":
+                paused = True
+                paused_time = int(round(time.time() * 100))
                 activeTask = isActive()
                 if activeTask:
                     endTime = valuesEdit["editableTime"]
@@ -440,7 +441,7 @@ while True:
                                 projectsDict = retrieveDict(PATH + PROGETTI)
                                 window["comboProject"].update(values=[proj[1] for proj in projectsList])
                                 window["comboProject"].update(value=projectsDict[str(projectID)][0])
-                                
+
                                 #  Se ci sono task abbinati al progetto, settare 0 come ID
                                 tasks = retrieve(PATH + TASK)
                                 counter = 0
@@ -492,7 +493,7 @@ while True:
         layoutEdit = [[sg.InputText(
             datetime.datetime.fromtimestamp(float(start_time) / 100).strftime('%d-%m-%Y %H:%M:%S'),
             key="editableTime")],
-            [sg.Button("Modifica", key="modifica"), sg.Exit()]]
+            [sg.Button("Modifica", key="modifica"), sg.Exit(button_color=('white', 'firebrick4'))]]
         windowEdit = sg.Window("Edit Time", layoutEdit, grab_anywhere=False)
         while True:
             eventEdit, valuesEdit = windowEdit.read()
@@ -739,7 +740,7 @@ while True:
                         [sg.CalendarButton("...al", key="fine", close_when_date_chosen=True,
                                            target="dataFine", format='%d-%m-%Y')],
                         [sg.InputText(key="dataFine")],
-                        [sg.Button("Continua"), sg.Exit()]]
+                        [sg.Button("Continua"), sg.Exit(button_color=('white', 'firebrick4'))]]
         windowPeriod = sg.Window("Period", layoutPeriod, auto_size_buttons=False, keep_on_top=False,
                                  grab_anywhere=True)
         while True:
