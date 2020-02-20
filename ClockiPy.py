@@ -1,5 +1,5 @@
-# TODO: Mostrare lista dei task modificabili con data inizio, data fine e progetto. Usare sistema di layout
-#  nell'array come in scelta/creazione progetto
+# TODO: 
+#  Gestione progetti, se se ne vuole cancellare uno, avvertire dello svuotamento dei task che lo usano
 
 import sys
 import PySimpleGUI as sg
@@ -36,7 +36,7 @@ def updateData(filename, entry, id):
     storeData(filename, header(filename), "w")
     for elements in oldfile:
         if int(elements[0]) == id:
-            if entry:
+            if entry:  # Se viene passato un array vuoto, svuota quel campo dal CSV
                 storeData(filename, entry)
         else:
             storeData(filename, elements)
@@ -256,7 +256,7 @@ while True:
         event, values = window.read(timeout=10)
         current_time = int(round(time.time() * 100)) - start_time
         if values and values["intervalliSiNo"]:
-            actualTime = datetime.datetime.fromtimestamp(time.time()).strftime('%d-%m-%Y')
+            actualTime = datetime.datetime.fromtimestamp(start_time / 100).strftime('%d-%m-%Y')
             intervalsNum = int(
                 time.mktime(time.strptime(actualTime + " " + values["combointervals"], "%d-%m-%Y %H:%M:%S")))
             if intervalsNum * 100 <= int(round(time.time() * 100)):
@@ -552,23 +552,14 @@ while True:
                     break
     elif event == 'Show Tasks List':
         taskList = retrieve(PATH + TASK)
-        taskList = taskList[::-1]
+        taskList = [task for task in taskList[::-1] if task[6] != "True"]
         projectsDict = retrieveDict(PATH + PROGETTI)
         headerTable = ["Nome", "Progetto", "Inizio", "Fine", "Durata (ore)"]
-        """tableValue = [[sg.Radio("", "radio1", key=task[0], background_color="gray",
-                                default=True if int(task[0]) == int(projectID) else False),
-                       sg.Text(task[3], key="prog_" + task[0]),
-                       sg.Text(projectsDict[task[2]][0], key="prog_" + task[0]),
-                       sg.Text(datetime.datetime.fromtimestamp(float(task[4]) / 100).strftime('%d-%m-%Y %H:%M:%S'),
-                               key="dataInizio_" + task[0]),
-                       sg.Text(datetime.datetime.fromtimestamp(float(task[5]) / 100).strftime('%d-%m-%Y %H:%M:%S'),
-                               key="dataFine_" + task[0])]
-                      for task in taskList if task[6] != "True"]"""
         tableValue = [[task[3], projectsDict[task[2]][0],
                        datetime.datetime.fromtimestamp(float(task[4]) / 100).strftime('%d-%m-%Y %H:%M:%S'),
                        datetime.datetime.fromtimestamp(float(task[5]) / 100).strftime('%d-%m-%Y %H:%M:%S'),
                        intervalToStringOraMinSec(int(task[5]) - int(task[4]))]
-                      for task in taskList if task[6] != "True"]
+                      for task in taskList]
         layoutChooseTasks = [[sg.Table(values=tableValue, headings=headerTable, max_col_width=25,
                                        auto_size_columns=True,
                                        display_row_numbers=False,
@@ -577,8 +568,10 @@ while True:
                                        key='taskTable',
                                        tooltip='Lista di task conclusi')],
                              [sg.Text()],
-                             [sg.Button("Modifica", key="modifica"),
-                              sg.Button("Elimina", key="elimina", button_color=('white', 'firebrick4'))]]
+                             [sg.Button("Modifica", key="modifica",
+                                        tooltip='Modifica un singolo task scelto alla volta'),
+                              sg.Button("Elimina", key="elimina", button_color=('white', 'firebrick4'),
+                                        tooltip='Elimina uno o più task alla volta. La rimozione è permanente')]]
         layoutTasksArray.append(layoutChooseTasks)
 
         windowTasks = sg.Window('Tasks list', layoutTasksArray[-1])
@@ -588,7 +581,8 @@ while True:
                 windowTasks.Close()
                 break
             elif eventTasks == "modifica":
-                if valuesTasks and valuesTasks["taskTable"]:
+                #  print(valuesTasks["taskTable"])
+                if valuesTasks and valuesTasks["taskTable"] and len(valuesTasks["taskTable"]) == 1:
                     rowID = valuesTasks["taskTable"][0]
                     selectedTask = tableValue[rowID]
                     layoutEditTask = [[sg.Text("Nome Task: ", key="nomeTask")],
@@ -616,8 +610,9 @@ while True:
                             dataSceltaFine = valuesEditTasks["inputFine"]
                             try:
                                 dataSceltaInizioNum = int(time.mktime(time.strptime(dataSceltaInizio, "%d-%m-%Y "
-                                                                                                      "%H:%M:%S")))*100
-                                dataSceltaFineNum = int(time.mktime(time.strptime(dataSceltaFine, "%d-%m-%Y %H:%M:%S")))*100
+                                                                                                      "%H:%M:%S"))) * 100
+                                dataSceltaFineNum = int(
+                                    time.mktime(time.strptime(dataSceltaFine, "%d-%m-%Y %H:%M:%S"))) * 100
                             except:
                                 wrongformat = True
                             if dataSceltaInizio == "" or dataSceltaFine == "" or wrongformat:
@@ -630,7 +625,7 @@ while True:
                                 newProjID = retrieveByX(projectsList, newProject, 1)[0]
                                 newDataInizio = dataSceltaInizioNum
                                 newDataFine = dataSceltaFineNum
-                                oldTask = taskList[rowID+1]
+                                oldTask = taskList[rowID]
                                 oldTask[2] = newProjID
                                 oldTask[3] = newName
                                 oldTask[4] = newDataInizio
@@ -648,9 +643,33 @@ while True:
 
                                 windowEditTask.Close()
                                 break
+                else:
+                    sg.PopupOK("Puoi scegliere un solo task da modificare alla volta" if
+                               len(valuesTasks["taskTable"]) > 1 else "Devi scegliere almeno un task da modificare")
             elif eventTasks == "elimina":
                 print("TODO Elimina")
-        # TODO: Da completare (modifica/cancella)
+                if valuesTasks and valuesTasks["taskTable"] and len(valuesTasks["taskTable"]) >= 1:
+                    rowsID = valuesTasks["taskTable"]
+                    scelta = sg.PopupYesNo(f"Sei sicuro di voler eliminare " + "il" if len(valuesTasks["taskTable"]) == 1 else "i" + " task?\n"
+                                           "La rimozione sarà permanente")
+                    if scelta == "Yes":
+                        for rowID in rowsID:
+                            oldTask = taskList[rowID]
+                            updateData(PATH + TASK, [], int(oldTask[0]))
+                        taskList = retrieve(PATH + TASK)
+                        taskList = [task for task in taskList[::-1] if task[6] != "True"]
+                        projectsDict = retrieveDict(PATH + PROGETTI)
+                        tableValue = [[task[3], projectsDict[task[2]][0],
+                                       datetime.datetime.fromtimestamp(float(task[4]) / 100).strftime(
+                                           '%d-%m-%Y %H:%M:%S'),
+                                       datetime.datetime.fromtimestamp(float(task[5]) / 100).strftime(
+                                           '%d-%m-%Y %H:%M:%S'),
+                                       intervalToStringOraMinSec(int(task[5]) - int(task[4]))]
+                                      for task in taskList]
+                        windowTasks["taskTable"].update(values=tableValue)
+                        sg.PopupOK("Task eliminat" + "o" if len(valuesTasks["taskTable"]) == 1 else "i" + " con successo")
+                else:
+                    sg.PopupOK("Devi selezionare almeno un task da eliminare")
     elif event == "Widget":
         layoutWidget = [[sg.Text(values["Task"], key="TaskW", size=(20, 1))],
                         [sg.Text('00:00.00', size=(12, 1), font=('Helvetica', 12),
@@ -671,7 +690,7 @@ while True:
                 current_time = int(round(time.time() * 100)) - start_time
                 if valuesW and valuesW["intervalliSiNo"]:
                     window["intervalliSiNo"].update(True)
-                    actualTime = datetime.datetime.fromtimestamp(time.time()).strftime('%d-%m-%Y')
+                    actualTime = datetime.datetime.fromtimestamp(start_time / 100).strftime('%d-%m-%Y')
                     intervalsNum = int(
                         time.mktime(time.strptime(actualTime + " " + values["combointervals"], "%d-%m-%Y %H:%M:%S")))
                     if intervalsNum * 100 <= int(round(time.time() * 100)):
