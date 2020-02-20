@@ -784,18 +784,27 @@ while True:
                 taskInInterval = [task for task in oldTask if
                                   dataSceltaInizioNum <= (float(task[4])) / 100 <= dataSceltaFineNum and task[
                                       6] == "False"]
+                progetti = {}
+                for task in taskInInterval:
+                    progetti[task[2]] =0
                 for task in taskInInterval:
                     if task[6] == "False":
                         dataInizio = datetime.datetime.fromtimestamp(float(task[4]) / 100).strftime('%d-%m-%Y %H:%M:%S')
                         dataFine = datetime.datetime.fromtimestamp(float(task[5]) / 100).strftime('%d-%m-%Y %H:%M:%S')
                         durata = int(task[5]) - int(task[4])
                         totaleTempo += durata
+                        progetti[task[2]] +=durata
                         durataStr = intervalToStringOraMinSec(durata)
                         userName = user[0][1].replace(" ", "_")
                         associaProject = retrieveByX(projectsList, task[2], 0)
                         storeData(filename, [associaProject[1], task[3], dataInizio, dataFine, durataStr])
+                print(progetti)
                 totaleStr = intervalToStringOraMinSec(totaleTempo)
-                storeData(filename, ["", "", "", "Totale (Ore:min:sec):", totaleStr])
+                progdict = retrieveDict(PATH + PROGETTI)
+                for prog in progetti:
+                    print(progdict[prog])
+                    storeData(filename, ["", "", "Totale del progetto ", progdict[prog][0] , intervalToStringOraMinSec(progetti[prog])])
+                storeData(filename, ["", "", "", "Totale Ore Lavorate ", totaleStr])
                 sg.PopupOK('File esportato con successo')
             else:
                 sg.PopupOK("Non ci sono elementi da esportare nell'intervallo di tempo scelto")
