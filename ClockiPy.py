@@ -23,13 +23,9 @@ LOGHEADER = ["TaskAttivoID", "Time"]
 def storeData(filename, entry, mode='a'):
     if not os.path.isfile(filename):
         mode = 'w'
-    try:
-        with open(filename, mode, newline='') as csvfile:
-            content = csv.writer(csvfile, delimiter=';', quotechar='|')
-            content.writerow(entry)
-        return True
-    except:
-        return False
+    with open(filename, mode, newline='') as csvfile:
+        content = csv.writer(csvfile, delimiter=';', quotechar='|')
+        content.writerow(entry)
 
 
 def updateData(filename, entry, id):
@@ -337,6 +333,7 @@ while True:
         paused_time = start_time"""
     if event == 'Stop&Save':
         wrongformat = False
+        paused_time = int(round(time.time() * 100))
         layoutEdit = [[sg.Text("Vuoi interrompere e salvare il Task? (puoi modificare l'orario prima di confermare)")],
                       [sg.InputText(
                           datetime.datetime.fromtimestamp(float(paused_time) / 100).strftime('%d-%m-%Y %H:%M:%S'),
@@ -350,7 +347,6 @@ while True:
                 break
             if eventEdit == "modifica":
                 paused = True
-                paused_time = int(round(time.time() * 100))
                 activeTask = isActive()
                 if activeTask:
                     endTime = valuesEdit["editableTime"]
@@ -784,35 +780,32 @@ while True:
             oldTask = retrieve(PATH + TASK)
             totaleTempo = 0
             if oldTask:
-                control = storeData(filename, EXPORTHEADER, "w")
-                if control:
-                    taskInInterval = [task for task in oldTask if
-                                      dataSceltaInizioNum <= (float(task[4])) / 100 <= dataSceltaFineNum and task[
-                                          6] == "False"]
-                    progetti = {}
-                    for task in taskInInterval:
-                        progetti[task[2]] =0
-                    for task in taskInInterval:
-                        if task[6] == "False":
-                            dataInizio = datetime.datetime.fromtimestamp(float(task[4]) / 100).strftime('%d-%m-%Y %H:%M:%S')
-                            dataFine = datetime.datetime.fromtimestamp(float(task[5]) / 100).strftime('%d-%m-%Y %H:%M:%S')
-                            durata = int(task[5]) - int(task[4])
-                            totaleTempo += durata
-                            progetti[task[2]] +=durata
-                            durataStr = intervalToStringOraMinSec(durata)
-                            userName = user[0][1].replace(" ", "_")
-                            associaProject = retrieveByX(projectsList, task[2], 0)
-                            storeData(filename, [associaProject[1], task[3], dataInizio, dataFine, durataStr])
-                    print(progetti)
-                    totaleStr = intervalToStringOraMinSec(totaleTempo)
-                    progdict = retrieveDict(PATH + PROGETTI)
-                    for prog in progetti:
-                        print(progdict[prog])
-                        storeData(filename, ["", "", "Totale del progetto ", progdict[prog][0] , intervalToStringOraMinSec(progetti[prog])])
-                    storeData(filename, ["", "", "", "Totale Ore Lavorate ", totaleStr])
-                    sg.PopupOK('File esportato con successo')
-                else:
-                    sg.PopupOK("Salvataggio non avvenuto. Controllare che il file non sia aperto")
+                storeData(filename, EXPORTHEADER, "w")
+                taskInInterval = [task for task in oldTask if
+                                  dataSceltaInizioNum <= (float(task[4])) / 100 <= dataSceltaFineNum and task[
+                                      6] == "False"]
+                progetti = {}
+                for task in taskInInterval:
+                    progetti[task[2]] =0
+                for task in taskInInterval:
+                    if task[6] == "False":
+                        dataInizio = datetime.datetime.fromtimestamp(float(task[4]) / 100).strftime('%d-%m-%Y %H:%M:%S')
+                        dataFine = datetime.datetime.fromtimestamp(float(task[5]) / 100).strftime('%d-%m-%Y %H:%M:%S')
+                        durata = int(task[5]) - int(task[4])
+                        totaleTempo += durata
+                        progetti[task[2]] +=durata
+                        durataStr = intervalToStringOraMinSec(durata)
+                        userName = user[0][1].replace(" ", "_")
+                        associaProject = retrieveByX(projectsList, task[2], 0)
+                        storeData(filename, [associaProject[1], task[3], dataInizio, dataFine, durataStr])
+                print(progetti)
+                totaleStr = intervalToStringOraMinSec(totaleTempo)
+                progdict = retrieveDict(PATH + PROGETTI)
+                for prog in progetti:
+                    print(progdict[prog])
+                    storeData(filename, ["", "", "Totale del progetto ", progdict[prog][0] , intervalToStringOraMinSec(progetti[prog])])
+                storeData(filename, ["", "", "", "Totale Ore Lavorate ", totaleStr])
+                sg.PopupOK('File esportato con successo')
             else:
                 sg.PopupOK("Non ci sono elementi da esportare nell'intervallo di tempo scelto")
     elif event == "Change Theme":
