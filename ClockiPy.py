@@ -1,6 +1,3 @@
-# TODO: 
-#  Gestione progetti, se se ne vuole cancellare uno, avvertire dello svuotamento dei task che lo usano
-
 import sys
 import PySimpleGUI as sg
 import time
@@ -168,6 +165,7 @@ if not os.path.isfile(PATH + INTERVALLI):
     storeData(PATH + INTERVALLI, [userID, "13:00:00, 18:00:00"])
 if not os.path.isfile(PATH + PROGETTI):
     storeData(PATH + PROGETTI, PROGETTIHEADER)
+    storeData(PATH + PROGETTI, [0, "Nessuno"])
 if not os.path.isfile(PATH + LOGSPEGNIMENTO):
     storeData(PATH + LOGSPEGNIMENTO, LOGHEADER)
 projects = retrieve(PATH + PROGETTI)  # Check if there is atleast one project. If not, force the creation of one
@@ -405,12 +403,15 @@ while True:
             [sg.Radio("", "radio1", key=proj[0], background_color="gray",
                       default=True if int(proj[0]) == int(projectID) else False),
              sg.InputText(proj[1], key="name_" + proj[0])]
-            for proj in projectsList]
+            for proj in projectsList if proj[0] != "0"]
         layoutChooseProject.append(
-            [sg.Radio("", "radio1", key="nuovoProj", background_color="gray"), sg.InputText(key="newProjName")])
-        layoutChooseProject.append([sg.Text()])
+            [sg.Radio("", "radio1", key="nuovoProj", background_color="gray",
+                      tooltip="Se vuoi creare un nuovo progetto, usa questo slot e clicca su 'Modifica/Aggiungi'"),
+             sg.InputText(key="newProjName")])
+        layoutChooseProject.append([sg.Text("")])
         layoutChooseProject.append([sg.Button("Modifica/Aggiungi", key="Scegli"),
-                                    sg.Button("Elimina", key="Elimina", button_color=('white', 'firebrick4')),
+                                    sg.Button("Elimina", key="Elimina", button_color=('white', 'firebrick4'),
+                                              tooltip="Spunta un progetto per eliminarlo"),
                                     sg.Exit(button_color=('white', 'firebrick4'))])
         layoutProjectArray.append(layoutChooseProject)
         windowChooseProject = sg.Window('Projects', layoutProjectArray[-1])
@@ -420,22 +421,36 @@ while True:
                 windowChooseProject.Close()
                 break
             elif eventProj == "Scegli" or eventProj == "Elimina":
-                for proj in projectsList:
+                for proj in projectsList[1:]:
                     currentID = proj[0]
-                    if valuesProj[currentID]:
-                        print(valuesProj[currentID])
+                    if valuesProj[currentID] and currentID != "0":
+                        #  print(valuesProj[currentID])
                         newChoosenName = valuesProj["name_" + currentID]
                         if eventProj == "Elimina":
-                            #  TODO: Se non coincide col progetto in uso, non cambiare il nome ed il valore attuale
-                            updateData(PATH + PROGETTI, [], int(currentID))
-                            projectsList = retrieve(PATH + PROGETTI)
-                            if projectID == int(currentID):
-                                projectID = 1
-                                newChoosenName = projectsList[0][1]
-                                window["invisibleIDProject"].update(projectID)
-                            window["comboProject"].update(values=[proj[1] for proj in projectsList])
-                            window["comboProject"].update(value=newChoosenName)
-                            sg.PopupOK("Progetto eliminato correttamente.")
+                            scelta = sg.PopupYesNo("Sei sicuro di voler eliminare il progetto?\n"
+                                                   "Se è abbinato a qualche Task, quei Task non saranno più abbinati "
+                                                   "a nessun progetto")
+                            if scelta == "Yes":
+                                updateData(PATH + PROGETTI, [], int(currentID))
+                                projectsList = retrieve(PATH + PROGETTI)
+                                if projectID == int(currentID):
+                                    projectID = 1
+                                    newChoosenName = projectsList[0][1]
+                                    window["invisibleIDProject"].update(projectID)
+                                projectsDict = retrieveDict(PATH + PROGETTI)
+                                window["comboProject"].update(values=[proj[1] for proj in projectsList])
+                                window["comboProject"].update(value=projectsDict[str(projectID)][0])
+                                
+                                #  Se ci sono task abbinati al progetto, settare 0 come ID
+                                tasks = retrieve(PATH + TASK)
+                                counter = 0
+                                for task in tasks:
+                                    if task[2] == currentID:
+                                        task[2] = 0
+                                        updateData(PATH + TASK, task, int(task[0]))
+                                        counter += 1
+                                sg.PopupOK("Progetto eliminato correttamente." + ("\nè stato rimosso da " + str(counter)
+                                                                                  + " Task" if counter > 0 else ""))
                         elif eventProj == "Scegli":
                             updateData(PATH + PROGETTI, [currentID, newChoosenName], int(currentID))
                             projectID = currentID
@@ -497,8 +512,6 @@ while True:
                     elif newStartNum > int(round(time.time() * 100)):
                         sg.PopupOK("La data di inizio del task non più venire dal futuro")
                     else:
-                        # TODO: modificare nel file task.csv la data di inizio del task corrispondente (se nessun task è
-                        #  stato avviato, segnalarlo)
                         activeTask[4] = newStartNum
                         updateData(PATH + TASK, activeTask, int(activeTask[0]))
                         start_time = newStartNum
@@ -566,7 +579,7 @@ while True:
                                        justification='center',
                                        num_rows=20,
                                        key='taskTable',
-                                       tooltip='Lista di task conclusi')],
+                                       tooltip='Lista di task conclusi. Seleziona uno o più (CTRL+Click) task')],
                              [sg.Text()],
                              [sg.Button("Modifica", key="modifica",
                                         tooltip='Modifica un singolo task scelto alla volta'),
@@ -585,6 +598,7 @@ while True:
                 if valuesTasks and valuesTasks["taskTable"] and len(valuesTasks["taskTable"]) == 1:
                     rowID = valuesTasks["taskTable"][0]
                     selectedTask = tableValue[rowID]
+                    projNameList = [proj[1] for proj in projectsList]
                     layoutEditTask = [[sg.Text("Nome Task: ", key="nomeTask")],
                                       [sg.Text("-", size=(1, 1)), sg.InputText(selectedTask[0], key="inputNome")],
                                       [sg.Text("Nome Progetto: ", key="nomeProject")],
@@ -647,11 +661,11 @@ while True:
                     sg.PopupOK("Puoi scegliere un solo task da modificare alla volta" if
                                len(valuesTasks["taskTable"]) > 1 else "Devi scegliere almeno un task da modificare")
             elif eventTasks == "elimina":
-                print("TODO Elimina")
                 if valuesTasks and valuesTasks["taskTable"] and len(valuesTasks["taskTable"]) >= 1:
                     rowsID = valuesTasks["taskTable"]
-                    scelta = sg.PopupYesNo(f"Sei sicuro di voler eliminare " + "il" if len(valuesTasks["taskTable"]) == 1 else "i" + " task?\n"
-                                           "La rimozione sarà permanente")
+                    scelta = sg.PopupYesNo(f"Sei sicuro di voler eliminare " + (
+                        "il" if len(valuesTasks["taskTable"]) == 1 else "i") + " task?\n"
+                                                                               "La rimozione sarà permanente")
                     if scelta == "Yes":
                         for rowID in rowsID:
                             oldTask = taskList[rowID]
@@ -667,7 +681,8 @@ while True:
                                        intervalToStringOraMinSec(int(task[5]) - int(task[4]))]
                                       for task in taskList]
                         windowTasks["taskTable"].update(values=tableValue)
-                        sg.PopupOK("Task eliminat" + "o" if len(valuesTasks["taskTable"]) == 1 else "i" + " con successo")
+                        sg.PopupOK(
+                            "Task eliminat" + ("o" if len(valuesTasks["taskTable"]) == 1 else "i") + " con successo")
                 else:
                     sg.PopupOK("Devi selezionare almeno un task da eliminare")
     elif event == "Widget":
@@ -761,7 +776,6 @@ while True:
                 filename = filename[0] + ".csv"
                 break
         if filename:
-            # filename = userName + "_" + EXPORT
             oldTask = retrieve(PATH + TASK)
             totaleTempo = 0
             if oldTask:
@@ -794,7 +808,7 @@ while True:
 
         windowThemes = sg.Window('Look and Feel Browser', layoutThemes)
 
-        while True:  # Event Loop
+        while True:
             eventThemes, valuesThemes = windowThemes.read()
             if eventThemes in (None, 'Exit'):
                 break
@@ -808,8 +822,7 @@ while True:
                 user[0][2] = "Reddit"
                 updateData(PATH + USER, user[0], int(userID))
                 windowThemes["temaAttuale"].update("Reddit")
-                sg.PopupOK("Tema resettato. Per rendere efettiva la modifica sarà necessario riavviare "
-                           "CloickiPy")
+                sg.PopupOK("Tema resettato. Per rendere efettiva la modifica sarà necessario riavviare CloickiPy")
             else:
                 sg.theme(valuesThemes['-LIST-'][0])
                 sg.popup_get_text('This is {}'.format(valuesThemes['-LIST-'][0]))
@@ -817,10 +830,5 @@ while True:
         windowThemes.close()
 
     # --------- Display timer in window --------
-    # window['text'].update('{:02d}:{:02d}.{:02d}'.format((current_time // 100) // 60,
-    #                                                    (current_time // 100) % 60,
-    #                                                    current_time % 100))
-    #  window['text'].update('{:02d}:{:02d}.{:02d}'.format(hours, minutes, seconds))
     current_time_str = intervalToStringOraMinSec(current_time)
     window['text'].update(current_time_str)
-    # window['text'].update(datetime.datetime.fromtimestamp(float(current_time)/100).strftime('%H:%M:%S'))
