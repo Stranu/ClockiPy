@@ -547,7 +547,7 @@ while True:
             elif eventIntervals == "salva":
                 intervalliNew = valuesIntervals["intervalli"]
                 intervalliNew = intervalliNew.strip()
-                intervalli = intervalliNew.split(",")
+                intervalli = intervalliNew.split(", ")
                 wrongformat = False
                 # time.mktime(time.strptime(dataSceltaInizio, "%d-%m-%Y %H:%M:%S"))
                 for intervallo in intervalli:
