@@ -207,9 +207,10 @@ menu_def = [['File', ['Show Tasks List', 'Export', 'Exit']],
 projNameList = [proj[1] for proj in projectsList]
 intervals = retrieve(PATH + INTERVALLI)
 intervals = [interv.strip() for interv in intervals[0][1].split(",")]
+taskList = retrieve(PATH + TASK)
 
 layout = [[sg.Menu(menu_def, )],
-          [sg.Text('Nome Task: '), sg.InputText(key="Task")],
+          [sg.Text('Nome Task: '), sg.InputText(taskList[-1][3] if taskList else "", key="Task")],
           [sg.Button('+', key="Edit", tooltip="Modifica l'orario di inizio del task"),
            sg.Text('00:00.00', size=(12, 1), font=('Helvetica', 20), key='text')],
           [sg.Text("Progetto attuale: "), sg.Combo(projNameList, key='comboProject', default_value=projNameList[-1]),
@@ -282,6 +283,7 @@ while True:
                         activeTask = []
                         paused = True
                         window['runStop'].update(text='Avvia')
+                        window["intervalliSiNo"].update(False)
                         windowIntervalAlarm.Close()
                         break
     else:
@@ -380,7 +382,8 @@ while True:
                     break
     elif event == 'Avvia':
         paused = False
-        start_time = start_time + int(round(time.time() * 100)) - paused_time
+        # start_time = start_time + int(round(time.time() * 100)) - paused_time
+        start_time = int(round(time.time() * 100))
         element = window['runStop']
         element.update(text='Stop&Save')
         window['logTask'].update(f'Stai eseguendo il task {values["Task"]}')
